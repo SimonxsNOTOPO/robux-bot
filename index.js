@@ -131,29 +131,36 @@ Se tiver dúvidas, é só abrir o ticket.`,
       ],
     });
 
-    await interaction.reply({
-      content: `✅ Ticket criado: ${channel}`,
-      ephemeral: true,
-    });
+    await interaction.reply({ content: `✅ Ticket criado: ${channel}`, ephemeral: true });
 
-    await channel.send(
-      `Olá, ${interaction.user}!
+// Mensagem inicial de orientação
+const initialMsg = await channel.send(
+  `📢 **Seja paciente, nossa equipe vai te atender em breve.**
 
-**Compra de Robux via Gamepass**
-Para agilizar, envie:
-1) Quantidade de Robux desejada
-2) Link do seu **jogo** onde será criado o *gamepass*
-3) Seu **@** no Roblox
+Para adiantar, envie:
+1) Quantidade de Robux desejada  
+2) Link do seu **jogo** onde será criado o *gamepass*  
+3) Seu **@** no Roblox  
+4) Comprovante de pagamento quando solicitado
 
-**Como funciona:**
-• Vamos informar o valor e criar/validar o *gamepass* com o preço correto.  
+**Importante:** Não compartilhe sua senha. Todo atendimento é feito **somente neste ticket**.`
+);
+
+// fixa a mensagem no topo do canal
+try { await initialMsg.pin(); } catch { /* ignorar se não tiver permissão de fixar */ }
+
+// Mensagem detalhada (opcional, pode manter ou remover)
+await channel.send(
+  `Olá, ${interaction.user}!
+
+**Fluxo da compra via Gamepass**
+• Informaremos o valor e criaremos/validaremos o *gamepass* com o preço correto.  
 • Você realiza a compra do *gamepass*.  
-• Após a confirmação, os Robux entram na sua conta (descontado o corte padrão da plataforma).
+• Após confirmarmos, os Robux entram na sua conta (considerando o corte padrão da plataforma).
 
 Se precisar, explico tudo passo a passo.`
-    );
-  }
-});
+);
+
 
 // Login no bot
 client.login(process.env.DISCORD_TOKEN);
