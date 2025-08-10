@@ -18,21 +18,21 @@ const {
 
 /* ===================== CORES (tema vermelho) ===================== */
 const COLORS = {
-  primary: 0xdc2626, // vermelho principal
-  accent:  0xef4444, // vermelho vivo
-  ok:      0x22c55e, // verde (status ok)
-  warn:    0xf59e0b, // amarelo (aviso)
-  danger:  0xb91c1c  // vermelho escuro (erro)
+  primary: 0xdc2626,
+  accent:  0xef4444,
+  ok:      0x22c55e,
+  warn:    0xf59e0b,
+  danger:  0xb91c1c
 };
 /* ================================================================ */
 
 /* ======================== CONFIG GERAL ======================== */
 const TICKET_PREFIX = 'ticket-';
-const DEFAULT_LANG = 'pt'; // 'pt' | 'en'
+const DEFAULT_LANG = 'pt';
 const INACTIVITY_HOURS = Number(process.env.INACTIVITY_HOURS || 12);
 const INACTIVITY_MS = Math.max(1, INACTIVITY_HOURS) * 60 * 60 * 1000;
-const BAR_IMAGE_URL = process.env.BAR_IMAGE_URL || ""; // URL da imagem da barra
-// Vars esperadas: DISCORD_TOKEN, GUILD_ID
+const BAR_IMAGE_URL = process.env.BAR_IMAGE_URL || ""; // URL pública da barra (imagem)
+// Vars: DISCORD_TOKEN, GUILD_ID
 // Opcionais: STAFF_ROLE_ID, TICKETS_CATEGORY_ID, LOG_CHANNEL_ID, BAR_IMAGE_URL, INACTIVITY_HOURS
 
 process.on('unhandledRejection', (r) => console.error('⚠️ UnhandledRejection:', r));
@@ -55,13 +55,11 @@ const texts = {
   pt: {
     brand: 'Loja de Robux',
     painelTitle: '— Painel de Tickets',
+    // Painel clean e padronizado no layout vermelho
     painelDesc:
-`:red_warning: **As lojas estão fechadas no momento**  
+`${':red_bar:'}
 
-:red_bar:
-
-**Suporte** • Abra um ticket para falar com a equipe
-**Horários** • Consulte nosso horário de atendimento`,
+**Suporte** • Abra um ticket para falar com a equipe`,
 
     btnOpen: '🎟️ Abrir Ticket',
     btnCloseWith: '✅ Fechar (com transcrição)',
@@ -109,13 +107,9 @@ Para adiantar, envie:
     brand: 'Robux Store',
     painelTitle: '— Ticket Panel',
     painelDesc:
-`:red_warning: **Stores are closed at the moment**  
+`${':red_bar:'}
 
-:red_bar:
-
-**Support** • Open a ticket to talk to the team  
-**Hours** • Check our business hours`,
-
+**Support** • Open a ticket to talk to the team`,
     btnOpen: '🎟️ Open Ticket',
     btnCloseWith: '✅ Close (with transcript)',
     btnCloseNo: '🛑 Close (no transcript)',
@@ -159,6 +153,66 @@ To speed up, send:
   }
 };
 
+/* ====================== TERMOS (transcritos) ====================== */
+const TERMS_PT = [
+  {
+    num: 1, title: 'Responsabilidade do Cliente',
+    text:
+'O cliente é responsável por fornecer as informações corretas e completas no momento da compra. Erros ou informações incompletas podem resultar em atrasos na entrega ou problemas de acesso ao produto.'
+  },
+  {
+    num: 2, title: 'Pagamento e Reembolso',
+    text:
+`A compra deve ser feita utilizando um dos métodos de pagamento disponíveis no ticket de cada loja.
+
+• Todos os pagamentos pelos nossos serviços são definitivos e não reembolsáveis após a entrega do produto, salvo em circunstâncias extremamente específicas.  
+• Tentativas de cancelamento ou contestação após a entrega serão consideradas fraude, sujeitando o autor às consequências legais.  
+• Para a compra de Robux, nossos serviços não cobrem questões relacionadas à dependência do Roblox. Portanto, banimentos e contestações realizados pela plataforma não são de responsabilidade da nossa loja.  
+• Em caso de reembolsos, o usuário concorda em aguardar um prazo de até 3 dias úteis para receber o valor.`
+  },
+  {
+    num: 3, title: 'Ativação após Confirmação',
+    text:
+'O acesso ao produto adquirido será concedido somente após a confirmação do pagamento. O cliente assume total responsabilidade caso acesse o jogo ou servidor antes da liberação oficial por um atendente, podendo comprometer a ativação do produto.'
+  },
+  {
+    num: 4, title: 'Prazo de Entrega',
+    text:
+'As entregas serão realizadas com um prazo de até 72 horas após a confirmação do pagamento. Caso ocorra algum atraso, entraremos em contato para informar sobre a situação.'
+  },
+  {
+    num: 5, title: 'Entregas Programadas',
+    text:
+'Ao efetuar o pagamento, você obtém o direito de posse do item adquirido. Algumas entregas podem ser agendadas para outro dia, desde que haja aviso prévio e acordo. Caso haja imprevistos e não seja possível realizar a entrega no dia combinado, o pedido será automaticamente reagendado para o próximo dia útil, respeitando nosso horário de atendimento.'
+  },
+  {
+    num: 6, title: 'Suporte Técnico',
+    text:
+'Oferecemos suporte técnico para questões relacionadas à entrega e acesso ao produto adquirido. Qualquer problema deve ser relatado imediatamente dentro do prazo de 72 horas para que possamos resolver de forma rápida e eficiente.'
+  },
+  {
+    num: 7, title: 'Política de Privacidade e Logs de Atividade',
+    text:
+'Garantimos total integridade e segurança dos dados compartilhados conosco pelo usuário, bem como de outras informações, ao longo de todo o processo. Todas as atividades realizadas pelo usuário dentro do servidor são registradas em logs. Portanto, qualquer violação dos termos, condições ou regras pode ser visualizada no banco de dados e usada como prova contra o autor.'
+  },
+  {
+    num: 8, title: 'Alterações nos Termos',
+    text:
+'Reservamo‑nos o direito de fazer alterações nestes termos a qualquer momento, mediante aviso prévio aos clientes. É responsabilidade do cliente revisar regularmente os termos de compra para estar ciente de quaisquer atualizações e alterações.'
+  },
+  {
+    num: 9, title: 'Aceitação dos Termos',
+    text:
+'Ao realizar uma compra em nosso servidor, o cliente concorda com todos os termos e condições estabelecidos acima.'
+  },
+  {
+    num: 10, title: 'Dúvidas e Contato',
+    text:
+'Em caso de qualquer dúvida, entre em contato com nossa equipe através do sistema de tickets.'
+  },
+];
+/* ================================================================ */
+
 /* ======================== HELPERS ======================== */
 const safe = (s) => s.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 90);
 
@@ -185,7 +239,7 @@ function buildTicketName(username, lang = DEFAULT_LANG) {
   return `${base}-${lang}`;
 }
 
-// Resolve custom emoji por nome -> "<:name:id>"
+// Custom emoji por nome -> "<:name:id>"
 function ce(guild, name) {
   try {
     const em = guild.emojis.cache.find(e => e.name === name);
@@ -202,7 +256,7 @@ function buildActionsRow(lang) {
   );
 }
 
-// Cria embed no estilo do print (vermelho) + imagem de barra
+// Embed estilizado (vermelho) + imagem de barra
 function styledEmbed(guild, lang, title, description, color = COLORS.primary) {
   const emb = new EmbedBuilder()
     .setColor(color)
@@ -305,7 +359,7 @@ function clearInactivityTimer(channelId) {
 const slashCommands = [
   new SlashCommandBuilder()
     .setName('painelticket')
-    .setDescription('Publica o painel de tickets.')
+    .setDescription('Publica o painel de tickets (layout vermelho).')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
 
   new SlashCommandBuilder()
@@ -314,6 +368,11 @@ const slashCommands = [
     .addChannelOption(o =>
       o.setName('canal').setDescription('Canal do ticket a apagar').setRequired(true)
     )
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+
+  new SlashCommandBuilder()
+    .setName('termos')
+    .setDescription('Envia os Termos (1 a 10) no layout vermelho.')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
 ].map(c => c.toJSON());
 
@@ -335,15 +394,13 @@ client.once('ready', async () => {
 /* ========================= INTERAÇÕES ========================= */
 client.on('interactionCreate', async (interaction) => {
   try {
-    // /painelticket
+    // /painelticket (layout padrão vermelho em tudo)
     if (interaction.isChatInputCommand() && interaction.commandName === 'painelticket') {
       const lang = DEFAULT_LANG;
       const g = interaction.guild;
 
-      // Tenta substituir tags de emoji pelo custom emoji do servidor
       const desc = texts[lang].painelDesc
-        .replaceAll(':red_bar:', ce(g, 'red_bar'))
-        .replaceAll(':red_warning:', ce(g, 'red_warning'));
+        .replaceAll(':red_bar:', ce(g, 'red_bar'));
 
       const embed = styledEmbed(g, lang, texts[lang].painelTitle, desc, COLORS.primary);
 
@@ -378,13 +435,33 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
-    // Botão: abrir ticket
+    // /termos — envia 10 embeds no layout vermelho
+    if (interaction.isChatInputCommand() && interaction.commandName === 'termos') {
+      const g = interaction.guild;
+      await interaction.reply({ content: '📄 Enviando termos...', ephemeral: true });
+
+      for (const t of TERMS_PT) {
+        const numEmoji = ce(g, `red_${t.num}`);
+        const embed = new EmbedBuilder()
+          .setColor(COLORS.primary)
+          .setTitle(`${numEmoji} — ${t.title}`)
+          .setDescription(t.text)
+          .setFooter({ text: texts.pt.brand });
+
+        if (BAR_IMAGE_URL) embed.setImage(BAR_IMAGE_URL);
+
+        await interaction.channel.send({ embeds: [embed] });
+      }
+      return;
+    }
+
+    // Botão: abrir ticket (tudo no layout vermelho e sem fixar)
     if (interaction.isButton() && interaction.customId === 'abrir_ticket') {
       const guild = interaction.guild;
       const categoryId = process.env.TICKETS_CATEGORY_ID || null;
       const staffRoleId = process.env.STAFF_ROLE_ID || null;
 
-      // 1 ticket por usuário (check por nome ou topic)
+      // 1 ticket por usuário (nome/topic)
       const existing = guild.channels.cache.find(c =>
         c.type === ChannelType.GuildText &&
         channelIsTicket(c) &&
@@ -431,30 +508,25 @@ client.on('interactionCreate', async (interaction) => {
 
       await interaction.reply({ content: `✅ ${texts[lang].ticketCreated(`${channel}`)}`, ephemeral: true });
 
-      // Mensagem fixada (estilo vermelho)
-      const pinnedEmbed = styledEmbed(
+      // Mensagem 1 (não fixa)
+      const m1 = styledEmbed(
         guild,
         lang,
-        `${ce(guild,'red_1')} ${texts[lang].pinnedTitle}`,
+        `:red_1: ${texts[lang].pinnedTitle}`,
         texts[lang].pinnedDesc,
         COLORS.accent
       );
-      const pinned = await channel.send({ embeds: [pinnedEmbed] });
+      await channel.send({ embeds: [m1] });
 
-      // Fixar se possível
-      const me = guild.members.me;
-      const canPin = me && channel.permissionsFor(me).has(PermissionFlagsBits.ManageMessages);
-      if (canPin) await pinned.pin().catch(() => {});
-
-      // Intro + botões
-      const introEmbed = styledEmbed(
+      // Mensagem 2 (intro + botões)
+      const m2 = styledEmbed(
         guild,
         lang,
-        `${ce(guild,'red_2')} ${texts[lang].introTitle}`,
+        `:red_2: ${texts[lang].introTitle}`,
         texts[lang].introDesc,
         COLORS.primary
       );
-      await channel.send({ embeds: [introEmbed], components: [buildActionsRow(lang)] });
+      await channel.send({ embeds: [m2], components: [buildActionsRow(lang)] });
 
       // Logs + timer
       await logEmbed(guild, lang, 'created', {
@@ -491,23 +563,11 @@ client.on('interactionCreate', async (interaction) => {
         await channel.setTopic(`TICKET_OWNER:${openerId || interaction.user.id} | LANG:${newLang}`).catch(()=>{});
         await interaction.deferUpdate();
 
-        const pinnedEmbed = styledEmbed(
-          channel.guild,
-          newLang,
-          `${ce(channel.guild,'red_1')} ${texts[newLang].pinnedTitle}`,
-          texts[newLang].pinnedDesc,
-          COLORS.accent
-        );
-        const introEmbed  = styledEmbed(
-          channel.guild,
-          newLang,
-          `${ce(channel.guild,'red_2')} ${texts[newLang].introTitle}`,
-          texts[newLang].introDesc,
-          COLORS.primary
-        );
+        const p = styledEmbed(channel.guild, newLang, `:red_1: ${texts[newLang].pinnedTitle}`, texts[newLang].pinnedDesc, COLORS.accent);
+        const i = styledEmbed(channel.guild, newLang, `:red_2: ${texts[newLang].introTitle}`, texts[newLang].introDesc, COLORS.primary);
 
-        await channel.send({ embeds: [pinnedEmbed] });
-        await channel.send({ embeds: [introEmbed], components: [buildActionsRow(newLang)] });
+        await channel.send({ embeds: [p] });
+        await channel.send({ embeds: [i], components: [buildActionsRow(newLang)] });
         startInactivityTimer(channel, newLang);
         return;
       }
