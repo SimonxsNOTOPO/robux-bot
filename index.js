@@ -1,79 +1,61 @@
-// ----- Watchdog (reinício automático em caso de crash) -----
+// ========================= WATCHDOG (reinício auto) =========================
+// Master/Primary relança o worker se cair; o bot roda no worker.
 const cluster = require('node:cluster');
-const os = require('node:os');
-
 if (cluster.isPrimary) {
   let restarts = 0;
-
-  function forkWorker() {
-    const worker = cluster.fork();
-    worker.on('exit', (code, signal) => {
+  const fork = () => {
+    const w = cluster.fork();
+    w.on('exit', (code, sig) => {
       restarts++;
-      const backoff = Math.min(30000, 2000 * restarts); // até 30s
-      console.warn(`⚠️ Worker saiu (code=${code}, signal=${signal}). Reiniciando em ${backoff/1000}s…`);
-      setTimeout(forkWorker, backoff);
+      const backoff = Math.min(30000, 2000 * restarts);
+      console.warn(`⚠️ Worker saiu (code=${code}, sig=${sig}). Reiniciando em ${backoff/1000}s…`);
+      setTimeout(fork, backoff);
     });
-  }
-
+  };
   console.log(`👑 Master PID ${process.pid} iniciando worker…`);
-  forkWorker();
-
-  // Opcional: reiniciar manualmente pelo console do Railway (enviando SIGUSR2)
+  fork();
   process.on('SIGUSR2', () => {
     console.log('♻️ Reinício manual solicitado (SIGUSR2).');
     for (const id in cluster.workers) cluster.workers[id].process.kill();
   });
-  return; // não continua no master
+  return;
 }
+// ========================= FIM WATCHDOG =========================
 
-// ========================= A PARTIR DAQUI: BOT =========================
 require('dotenv').config();
 
 const {
-  Client,
-  GatewayIntentBits,
-  Partials,
-  REST,
-  Routes,
-  ChannelType,
-  PermissionFlagsBits,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  SlashCommandBuilder,
-  AttachmentBuilder,
-  EmbedBuilder,
-  PermissionsBitField
+  Client, GatewayIntentBits, Partials, REST, Routes, ChannelType,
+  PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+  SlashCommandBuilder, AttachmentBuilder, EmbedBuilder, PermissionsBitField
 } = require('discord.js');
 
-/* ===================== CORES (tema vermelho) ===================== */
+/* ===================== IDENTIDADE VISUAL (vermelho) ===================== */
+const BRAND = 'TRACKONTOP'; // nome que aparecerá no rodapé dos embeds
 const COLORS = {
-  primary: 0xdc2626,
-  accent:  0xef4444,
-  ok:      0x22c55e,
-  warn:    0xf59e0b,
-  danger:  0xb91c1c
+  primary: 0xdc2626, // vermelho principal
+  accent:  0xef4444, // vermelho claro
+  ok:      0x22c55e, // verde
+  warn:    0xf59e0b, // amarelo
+  danger:  0xb91c1c  // vermelho escuro
 };
+// Barra padrão (pode sobrescrever por env BAR_IMAGE_URL)
+const BAR_IMAGE_URL = process.env.BAR_IMAGE_URL || "https://i.vgy.me/Jqt1ra.png";
 
 /* ======================== CONFIG GERAL ======================== */
 const TICKET_PREFIX = 'ticket-';
 const DEFAULT_LANG = 'pt';
 const INACTIVITY_HOURS = Number(process.env.INACTIVITY_HOURS || 12);
 const INACTIVITY_MS = Math.max(1, INACTIVITY_HOURS) * 60 * 60 * 1000;
-const BAR_IMAGE_URL = process.env.BAR_IMAGE_URL || ""; // URL pública da imagem da barra
+// Vars obrigatórias: DISCORD_TOKEN, GUILD_ID
+// Opcionais: STAFF_ROLE_ID, TICKETS_CATEGORY_ID, LOG_CHANNEL_ID, INACTIVITY_HOURS, BAR_IMAGE_URL
 
-process.on('unhandledRejection', (r) => {
-  console.error('⚠️ UnhandledRejection:', r);
-  // deixa o worker continuar; se for crítico, o processo cairá e o watchdog religa
-});
-process.on('uncaughtException',  (e) => {
-  console.error('⚠️ UncaughtException:', e);
-  // encerra para o watchdog religar
-  setTimeout(() => process.exit(1), 500);
-});
+process.on('unhandledRejection', (r) => console.error('⚠️ UnhandledRejection:', r));
+process.on('uncaughtException',  (e) => { console.error('⚠️ UncaughtException:', e); setTimeout(()=>process.exit(1), 500); });
 
 ['DISCORD_TOKEN', 'GUILD_ID'].forEach(k => { if (!process.env[k]) console.warn(`⚠️ Variável ausente: ${k}`); });
 
+/* ======================== CLIENT (intents) ======================== */
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -84,16 +66,15 @@ const client = new Client({
   partials: [Partials.Channel],
 });
 
-/* ========================= TEXTOS ========================= */
+/* ========================= TEXTOS BASE ========================= */
 const texts = {
   pt: {
-    brand: 'Loja de Robux',
+    brand: BRAND,
     painelTitle: '— Painel de Tickets',
     painelDesc:
 `${':red_bar:'}
 
 **Suporte** • Abra um ticket para falar com a equipe`,
-
     btnOpen: '🎟️ Abrir Ticket',
     btnCloseWith: '✅ Fechar (com transcrição)',
     btnCloseNo: '🛑 Fechar (sem transcrição)',
@@ -135,9 +116,8 @@ Para adiantar, envie:
       auto: 'fechado automaticamente (inatividade)'
     }
   },
-
   en: {
-    brand: 'Robux Store',
+    brand: BRAND,
     painelTitle: '— Ticket Panel',
     painelDesc:
 `${':red_bar:'}
@@ -173,7 +153,6 @@ To speed up, send:
     deleted: 'Ticket will be deleted.',
     notAllowed: 'You are not allowed to do this.',
     notTicket: 'This channel does not look like a ticket.',
-
     logs: {
       header: 'Ticket Logs',
       created: 'Ticket Created',
@@ -186,7 +165,7 @@ To speed up, send:
   }
 };
 
-/* ====================== TERMOS (transcritos) ====================== */
+/* ====================== TERMOS (10 em 1 embed) ====================== */
 const TERMS_PT = [
   { num: 1,  title: 'Responsabilidade do Cliente', text:
 'O cliente é responsável por fornecer as informações corretas e completas no momento da compra. Erros ou informações incompletas podem resultar em atrasos na entrega ou problemas de acesso ao produto.' },
@@ -224,62 +203,69 @@ const TERMS_PT = [
 'Em caso de qualquer dúvida, entre em contato com nossa equipe através do sistema de tickets.' },
 ];
 
+/* ====================== REGRAS (1 embed) ====================== */
+const RULES_PT = [
+  { num: 1,  title: 'Respeito em Primeiro Lugar', text: 'Seja respeitoso com todos os membros e com a equipe.' },
+  { num: 2,  title: 'Sem SPAM/Divulgação', text: 'Proibido SPAM, flood ou divulgação sem autorização.' },
+  { num: 3,  title: 'Privacidade', text: 'Não envie dados pessoais no chat ou em tickets.' },
+  { num: 4,  title: 'Pagamento Seguro', text: 'Todos os pagamentos devem ser confirmados antes da entrega.' },
+  { num: 5,  title: 'Linguagem', text: 'Evite palavras de baixo calão e qualquer conteúdo ofensivo.' },
+  { num: 6,  title: 'Ordem de Atendimento', text: 'Não insista para ser atendido fora da ordem.' },
+  { num: 7,  title: 'Prazos', text: 'O prazo de entrega é informado pela equipe e pode variar.' },
+  { num: 8,  title: '1 Ticket por Usuário', text: 'Não abra múltiplos tickets para o mesmo assunto.' },
+  { num: 9,  title: 'Ticket do Comprador', text: 'Somente o comprador deve interagir no ticket.' },
+  { num: 10, title: 'Consequências', text: 'Quebra de regras pode resultar em mute/ban permanente.' },
+];
+
 /* ======================== HELPERS ======================== */
+// utilidades
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
 const safe = (s) => s.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 90);
 
+// checar staff
 const isStaff = (member) => {
   const roleId = process.env.STAFF_ROLE_ID;
   if (!roleId) return member.permissions.has(PermissionFlagsBits.ManageChannels);
   return member.roles.cache.has(roleId) || member.permissions.has(PermissionFlagsBits.ManageChannels);
 };
 
-function channelIsTicket(channel) {
-  if (!channel || channel.type !== ChannelType.GuildText) return false;
-  return channel.name.startsWith(TICKET_PREFIX) || (channel.topic && channel.topic.includes('TICKET_OWNER:'));
-}
+// canal é ticket?
+const channelIsTicket = (channel) =>
+  !!channel && channel.type === ChannelType.GuildText &&
+  (channel.name?.startsWith(TICKET_PREFIX) || channel.topic?.includes('TICKET_OWNER:'));
 
-function ticketLangOf(channel) {
-  if (!channel || !channel.name) return DEFAULT_LANG;
+const ticketLangOf = (channel) => {
+  if (!channel?.name) return DEFAULT_LANG;
   if (channel.name.endsWith('-en')) return 'en';
   if (channel.name.endsWith('-pt')) return 'pt';
   return DEFAULT_LANG;
-}
+};
 
-function buildTicketName(username, lang = DEFAULT_LANG) {
-  const base = `${TICKET_PREFIX}${safe(username)}`;
-  return `${base}-${lang}`;
-}
+const buildTicketName = (username, lang = DEFAULT_LANG) =>
+  `${TICKET_PREFIX}${safe(username)}-${lang}`;
 
-// Custom emoji por nome -> "<:name:id>"
+// Buscar emoji custom por nome (tolerante a erro)
 function ce(guild, name) {
   try {
-    const em = guild.emojis.cache.find(e => e.name === name);
-    return em ? `<:${em.name}:${em.id}>` : `:${name}:`;
-  } catch { return `:${name}:`; }
+    const em = guild?.emojis?.cache?.find?.(e => e.name === name);
+    return em ? `<:${em.name}:${em.id}>` : ''; // fallback vazio (não quebra)
+  } catch { return ''; }
 }
 
-function buildActionsRow(lang) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('close_with_transcript').setLabel(texts[lang].btnCloseWith).setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('close_no_transcript').setLabel(texts[lang].btnCloseNo).setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId('delete_ticket').setLabel(texts[lang].btnDelete).setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('toggle_lang').setLabel(texts[lang].btnLang).setStyle(ButtonStyle.Primary)
-  );
-}
-
-// Embed estilizado (vermelho) + imagem de barra
+// Criar embed com tema vermelho e barra no rodapé
 function styledEmbed(guild, lang, title, description, color = COLORS.primary) {
   const emb = new EmbedBuilder()
     .setColor(color)
-    .setTitle(`🟥 ${title}`)
-    .setDescription(description)
+    .setTitle(title ? `🟥 ${title}` : '🟥')
+    .setDescription(description || '')
     .setFooter({ text: texts[lang].brand });
-
-  if (BAR_IMAGE_URL) emb.setImage(BAR_IMAGE_URL);
+  if (typeof BAR_IMAGE_URL === 'string' && /^https?:\/\//i.test(BAR_IMAGE_URL)) {
+    emb.setImage(BAR_IMAGE_URL);
+  }
   return emb;
 }
 
+// Logs para canal de LOG_CHANNEL_ID (se configurado)
 async function logEmbed(guild, lang, kind, data = {}, attachment) {
   const id = process.env.LOG_CHANNEL_ID;
   if (!id) return;
@@ -293,7 +279,7 @@ async function logEmbed(guild, lang, kind, data = {}, attachment) {
 
   const emb = new EmbedBuilder()
     .setColor(color)
-    .setTitle(`🟥 ${texts[lang].logs.header}`)
+    .setTitle('🟥 Ticket Logs')
     .addFields(
       { name: 'Evento',  value: `**${title}**`, inline: true },
       { name: 'Usuário', value: `${data.user || '—'}`, inline: true },
@@ -302,7 +288,7 @@ async function logEmbed(guild, lang, kind, data = {}, attachment) {
     )
     .setTimestamp();
 
-  if (BAR_IMAGE_URL) emb.setImage(BAR_IMAGE_URL);
+  if (typeof BAR_IMAGE_URL === 'string' && /^https?:\/\//i.test(BAR_IMAGE_URL)) emb.setImage(BAR_IMAGE_URL);
 
   try {
     if (attachment) await ch.send({ embeds: [emb], files: [attachment] });
@@ -310,6 +296,7 @@ async function logEmbed(guild, lang, kind, data = {}, attachment) {
   } catch {}
 }
 
+// Coletar transcrição (txt)
 async function collectTranscript(channel) {
   const lines = [];
   let lastId = null;
@@ -329,7 +316,7 @@ async function collectTranscript(channel) {
       lines.push(`[${time}] ${author}: ${content} ${attachments}`.trim());
     }
     lastId = arr[0].id;
-    if (lines.length > 10000) break; // limite segurança
+    if (lines.length > 10000) break; // limite de segurança
   }
 
   const text = lines.join('\n') || 'Sem mensagens.';
@@ -337,18 +324,16 @@ async function collectTranscript(channel) {
   return new AttachmentBuilder(buf, { name: `transcript-${channel.name}.txt` });
 }
 
-/* =================== INATIVIDADE (AUTO‑CLOSE) =================== */
-const inactivityTimers = new Map(); // channelId -> timeoutId
+/* =================== AUTO-FECHAMENTO POR INATIVIDADE =================== */
+const inactivityTimers = new Map();
 function startInactivityTimer(channel, lang) {
   clearInactivityTimer(channel.id);
   const id = setTimeout(async () => {
     try {
       if (!channelIsTicket(channel)) return;
-      await channel.send({ embeds: [styledEmbed(channel.guild, lang, '', texts[lang].logs.auto, COLORS.warn)] });
+      await channel.send({ embeds: [styledEmbed(channel.guild, lang, '', texts[lang].logs.auto, COLORS.warn)] }).catch(()=>{});
       await logEmbed(channel.guild, lang, 'closed', {
-        user: 'Sistema',
-        channel: `${channel}`,
-        details: texts[lang].logs.auto
+        user: 'Sistema', channel: `${channel}`, details: texts[lang].logs.auto
       });
       await channel.delete().catch(() => {});
     } catch (e) {
@@ -382,7 +367,12 @@ const slashCommands = [
 
   new SlashCommandBuilder()
     .setName('termos')
-    .setDescription('Envia os Termos em 2 mensagens (1–5 e 6–10).')
+    .setDescription('Envia os Termos (10 em 1 mensagem).')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+
+  new SlashCommandBuilder()
+    .setName('regras')
+    .setDescription('Envia as regras essenciais (1 mensagem).')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
 ].map(c => c.toJSON());
 
@@ -391,114 +381,115 @@ client.once('ready', async () => {
   console.log(`✅ Logado como ${client.user.tag} (PID ${process.pid})`);
   try {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-    await rest.put(
-      Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID),
-      { body: slashCommands }
-    );
+    await rest.put(Routes.applicationGuildCommands(client.user.id, process.env.GUILD_ID), { body: slashCommands });
     console.log('✅ Slash commands registrados.');
-  } catch (err) {
-    console.error('❌ Erro ao registrar comandos:', err);
-  }
+  } catch (err) { console.error('❌ Erro ao registrar comandos:', err); }
 });
 
 /* ========================= INTERAÇÕES ========================= */
 client.on('interactionCreate', async (interaction) => {
   try {
-    // /painelticket
+    // ===================== /painelticket =====================
     if (interaction.isChatInputCommand() && interaction.commandName === 'painelticket') {
-      const lang = DEFAULT_LANG;
-      const g = interaction.guild;
-
-      const desc = texts[lang].painelDesc.replaceAll(':red_bar:', ce(g, 'red_bar'));
+      const lang = DEFAULT_LANG, g = interaction.guild;
+      const rb = ce(g, 'red_bar');
+      const desc = texts[lang].painelDesc.replace(':red_bar:', rb || '');
       const embed = styledEmbed(g, lang, texts[lang].painelTitle, desc, COLORS.primary);
 
-      const abrirBtn = new ButtonBuilder()
-        .setCustomId('abrir_ticket')
-        .setLabel(texts[lang].btnOpen)
-        .setStyle(ButtonStyle.Primary);
-
+      const abrirBtn = new ButtonBuilder().setCustomId('abrir_ticket').setLabel(texts[lang].btnOpen).setStyle(ButtonStyle.Primary);
       const row = new ActionRowBuilder().addComponents(abrirBtn);
+
       await interaction.reply({ embeds: [embed], components: [row] });
       return;
     }
 
-    // /apagar_ticket
+    // ===================== /apagar_ticket =====================
     if (interaction.isChatInputCommand() && interaction.commandName === 'apagar_ticket') {
       if (!isStaff(interaction.member)) {
-        await interaction.reply({ content: texts[DEFAULT_LANG].notAllowed, ephemeral: true });
-        return;
+        await interaction.reply({ content: texts[DEFAULT_LANG].notAllowed, ephemeral: true }); return;
       }
       const ch = interaction.options.getChannel('canal');
       if (!channelIsTicket(ch)) {
-        await interaction.reply({ content: texts[DEFAULT_LANG].notTicket, ephemeral: true });
-        return;
+        await interaction.reply({ content: texts[DEFAULT_LANG].notTicket, ephemeral: true }); return;
       }
       await interaction.reply({ content: `🗑️ ${texts[DEFAULT_LANG].deleted}` , ephemeral: true });
-      await logEmbed(interaction.guild, DEFAULT_LANG, 'deleted', {
-        user: `${interaction.user} (${interaction.user.id})`,
-        channel: `${ch}`,
-      });
+      await logEmbed(interaction.guild, DEFAULT_LANG, 'deleted', { user: `${interaction.user} (${interaction.user.id})`, channel: `${ch}` });
       clearInactivityTimer(ch.id);
       await ch.delete().catch(() => {});
       return;
     }
 
-    // /termos — agora 2 embeds (1–5) e (6–10)
+    // ===================== /termos (10 em 1) =====================
     if (interaction.isChatInputCommand() && interaction.commandName === 'termos') {
-      const g = interaction.guild;
-      const channel = interaction.channel;
-
+      const g = interaction.guild, channel = interaction.channel;
       const me = g.members.me;
-      const needed = new PermissionsBitField([
-        PermissionFlagsBits.ViewChannel,
-        PermissionFlagsBits.SendMessages,
-        PermissionFlagsBits.EmbedLinks
-      ]);
+      const needed = new PermissionsBitField([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks]);
       const perms = channel.permissionsFor(me);
       if (!perms || !perms.has(needed)) {
-        await interaction.reply({
-          content: '❌ Sem permissão aqui. Dê ao bot: **Ver canal**, **Enviar mensagens** e **Inserir links/embeds**.',
-          ephemeral: true
-        });
+        await interaction.reply({ content: '❌ Sem permissão aqui para enviar embeds.', ephemeral: true });
         return;
       }
-
       await interaction.reply({ content: '📄 Enviando termos…', ephemeral: true });
 
-      const pack = (items) => {
-        const emb = new EmbedBuilder()
-          .setColor(COLORS.primary)
-          .setTitle('🟥 — Termos de Compra')
-          .setFooter({ text: texts.pt.brand });
+      const emb = new EmbedBuilder()
+        .setColor(COLORS.primary)
+        .setTitle('🟥 — Termos de Compra')
+        .setFooter({ text: texts.pt.brand });
 
-        items.forEach(t => {
-          const emoji = ce(g, `red_${t.num}`);
-          emb.addFields({ name: `${emoji} — ${t.title}`, value: t.text.slice(0, 1024) || '—' });
-        });
+      TERMS_PT.forEach(t => {
+        const emoji = ce(g, `red_${t.num}`) || `#${t.num}`;
+        const value = (t.text || '—').slice(0, 1024); // limite por field
+        emb.addFields({ name: `${emoji} — ${t.title}`, value });
+      });
 
-        if (BAR_IMAGE_URL) emb.setImage(BAR_IMAGE_URL);
-        return emb;
-      };
+      if (typeof BAR_IMAGE_URL === 'string' && /^https?:\/\//i.test(BAR_IMAGE_URL)) emb.setImage(BAR_IMAGE_URL);
 
-      const first = pack(TERMS_PT.slice(0,5));
-      const second = pack(TERMS_PT.slice(5,10));
-
-      await channel.send({ embeds: [first] });
-      await wait(400);
-      await channel.send({ embeds: [second] });
+      try {
+        await channel.send({ embeds: [emb] });
+      } catch (e) {
+        // Fallback texto puro
+        const block = TERMS_PT.map(t => `**${t.num} — ${t.title}**\n${t.text}`).join('\n\n');
+        await channel.send({ content: block.slice(0, 1950) }).catch(()=>{});
+      }
       return;
     }
 
-    // Botão: abrir ticket
+    // ===================== /regras (1 mensagem) =====================
+    if (interaction.isChatInputCommand() && interaction.commandName === 'regras') {
+      const g = interaction.guild, channel = interaction.channel;
+      await interaction.reply({ content: '📋 Enviando regras…', ephemeral: true });
+
+      const emb = new EmbedBuilder()
+        .setColor(COLORS.primary)
+        .setTitle('🟥 — Regras do Servidor')
+        .setFooter({ text: texts.pt.brand });
+
+      RULES_PT.forEach(r => {
+        const emoji = ce(g, `red_${r.num}`) || `#${r.num}`;
+        emb.addFields({ name: `${emoji} — ${r.title}`, value: r.text.slice(0, 1024) });
+      });
+
+      if (typeof BAR_IMAGE_URL === 'string' && /^https?:\/\//i.test(BAR_IMAGE_URL)) emb.setImage(BAR_IMAGE_URL);
+
+      try {
+        await channel.send({ embeds: [emb] });
+      } catch (e) {
+        const block = RULES_PT.map(r => `**${r.num} — ${r.title}**\n${r.text}`).join('\n\n');
+        await channel.send({ content: block.slice(0, 1950) }).catch(()=>{});
+      }
+      return;
+    }
+
+    // ===================== Botão: abrir_ticket =====================
     if (interaction.isButton() && interaction.customId === 'abrir_ticket') {
       const guild = interaction.guild;
       const categoryId = process.env.TICKETS_CATEGORY_ID || null;
       const staffRoleId = process.env.STAFF_ROLE_ID || null;
 
+      // Anti-spam: 1 ticket por usuário
       const existing = guild.channels.cache.find(c =>
-        c.type === ChannelType.GuildText &&
-        channelIsTicket(c) &&
-        (c.name.includes(safe(interaction.user.username)) || (c.topic && c.topic.includes(`TICKET_OWNER:${interaction.user.id}`)))
+        c.type === ChannelType.GuildText && channelIsTicket(c) &&
+        (c.name.includes(safe(interaction.user.username)) || c.topic?.includes(`TICKET_OWNER:${interaction.user.id}`))
       );
       if (existing) {
         await interaction.reply({ content: `⚠️ ${texts[DEFAULT_LANG].ticketExists(existing)}`, ephemeral: true });
@@ -508,23 +499,20 @@ client.on('interactionCreate', async (interaction) => {
       const lang = DEFAULT_LANG;
       const channelName = buildTicketName(interaction.user.username, lang);
 
+      // Permissões com anexos
       const overwrites = [
         { id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] },
         { id: interaction.user.id, allow: [
-            PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.SendMessages,
-            PermissionFlagsBits.ReadMessageHistory,
-            PermissionFlagsBits.AttachFiles
+            PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles
         ]},
       ];
       if (staffRoleId) {
         overwrites.push({
           id: staffRoleId,
           allow: [
-            PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.SendMessages,
-            PermissionFlagsBits.ReadMessageHistory,
-            PermissionFlagsBits.ManageChannels,
+            PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels,
             PermissionFlagsBits.AttachFiles
           ],
         });
@@ -540,39 +528,40 @@ client.on('interactionCreate', async (interaction) => {
 
       await interaction.reply({ content: `✅ ${texts[lang].ticketCreated(`${channel}`)}`, ephemeral: true });
 
+      // Mensagem 1 (atendimento)
       const m1 = styledEmbed(
-        guild,
-        lang,
-        `${ce(guild,'red_1')} ${texts[lang].pinnedTitle}`,
+        guild, lang,
+        `${ce(guild,'red_1') || '1'} ${texts[lang].pinnedTitle}`,
         texts[lang].pinnedDesc,
         COLORS.accent
       );
-      await channel.send({ embeds: [m1] });
+      await channel.send({ embeds: [m1] }).catch(()=>{});
 
+      // Mensagem 2 (como funciona) + botões
       const m2 = styledEmbed(
-        guild,
-        lang,
-        `${ce(guild,'red_2')} ${texts[lang].introTitle}`,
+        guild, lang,
+        `${ce(guild,'red_2') || '2'} ${texts[lang].introTitle}`,
         texts[lang].introDesc,
         COLORS.primary
       );
-      await channel.send({ embeds: [m2], components: [buildActionsRow(lang)] });
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('close_with_transcript').setLabel(texts[lang].btnCloseWith).setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('close_no_transcript').setLabel(texts[lang].btnCloseNo).setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId('delete_ticket').setLabel(texts[lang].btnDelete).setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('toggle_lang').setLabel(texts[lang].btnLang).setStyle(ButtonStyle.Primary)
+      );
+      await channel.send({ embeds: [m2], components: [row] }).catch(()=>{});
 
-      await logEmbed(guild, lang, 'created', {
-        user: `${interaction.user} (${interaction.user.id})`,
-        channel: `${channel}`,
-      });
+      // Log + timer
+      await logEmbed(guild, lang, 'created', { user: `${interaction.user} (${interaction.user.id})`, channel: `${channel}` });
       startInactivityTimer(channel, lang);
       return;
     }
 
-    // Botões do ticket
+    // ===================== Botões do ticket =====================
     if (interaction.isButton() && ['close_with_transcript','close_no_transcript','delete_ticket','toggle_lang'].includes(interaction.customId)) {
       const channel = interaction.channel;
-      if (!channelIsTicket(channel)) {
-        await interaction.reply({ content: texts[DEFAULT_LANG].notTicket, ephemeral: true });
-        return;
-      }
+      if (!channelIsTicket(channel)) { await interaction.reply({ content: texts[DEFAULT_LANG].notTicket, ephemeral: true }); return; }
 
       const openerId = channel.topic?.match(/TICKET_OWNER:(\d+)/)?.[1];
       const userIsOpener = openerId && openerId === interaction.user.id;
@@ -580,23 +569,26 @@ client.on('interactionCreate', async (interaction) => {
       const lang = ticketLangOf(channel);
 
       if (!userIsStaff && !userIsOpener && interaction.customId !== 'toggle_lang') {
-        await interaction.reply({ content: texts[lang].notAllowed, ephemeral: true });
-        return;
+        await interaction.reply({ content: texts[lang].notAllowed, ephemeral: true }); return;
       }
 
       // Alternar idioma
       if (interaction.customId === 'toggle_lang') {
         const newLang = lang === 'pt' ? 'en' : 'pt';
         const base = channel.name.replace(/-(pt|en)$/i, '');
-        await channel.setName(`${base}-${newLang}`).catch(() => {});
+        await channel.setName(`${base}-${newLang}`).catch(()=>{});
         await channel.setTopic(`TICKET_OWNER:${openerId || interaction.user.id} | LANG:${newLang}`).catch(()=>{});
         await interaction.deferUpdate();
 
-        const p = styledEmbed(channel.guild, newLang, `${ce(channel.guild,'red_1')} ${texts[newLang].pinnedTitle}`, texts[newLang].pinnedDesc, COLORS.accent);
-        const i = styledEmbed(channel.guild, newLang, `${ce(channel.guild,'red_2')} ${texts[newLang].introTitle}`, texts[newLang].introDesc, COLORS.primary);
-
-        await channel.send({ embeds: [p] });
-        await channel.send({ embeds: [i], components: [buildActionsRow(newLang)] });
+        const p = styledEmbed(channel.guild, newLang, `${ce(channel.guild,'red_1') || '1'} ${texts[newLang].pinnedTitle}`, texts[newLang].pinnedDesc, COLORS.accent);
+        const i = styledEmbed(channel.guild, newLang, `${ce(channel.guild,'red_2') || '2'} ${texts[newLang].introTitle}`, texts[newLang].introDesc, COLORS.primary);
+        await channel.send({ embeds: [p] }).catch(()=>{});
+        await channel.send({ embeds: [i], components: [new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('close_with_transcript').setLabel(texts[newLang].btnCloseWith).setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId('close_no_transcript').setLabel(texts[newLang].btnCloseNo).setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId('delete_ticket').setLabel(texts[newLang].btnDelete).setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId('toggle_lang').setLabel(texts[newLang].btnLang).setStyle(ButtonStyle.Primary)
+        )] }).catch(()=>{});
         startInactivityTimer(channel, newLang);
         return;
       }
@@ -604,56 +596,48 @@ client.on('interactionCreate', async (interaction) => {
       // Fechar (com/sem transcrição)
       if (interaction.customId === 'close_with_transcript' || interaction.customId === 'close_no_transcript') {
         const withTranscript = interaction.customId === 'close_with_transcript';
-        await interaction.reply({ embeds: [styledEmbed(interaction.guild, lang, '', texts[lang].closing, COLORS.warn)], ephemeral: true });
+        await interaction.reply({ embeds: [styledEmbed(interaction.guild, lang, '', texts[lang].closing, COLORS.warn)], ephemeral: true }).catch(()=>{});
 
         let attach = null;
         if (withTranscript) {
           try {
             attach = await collectTranscript(channel);
-            await channel.send({ embeds: [styledEmbed(interaction.guild, lang, '', texts[lang].closed, COLORS.ok)], files: [attach] });
+            await channel.send({ embeds: [styledEmbed(interaction.guild, lang, '', texts[lang].closed, COLORS.ok)], files: [attach] }).catch(()=>{});
             await logEmbed(interaction.guild, lang, 'closed', {
-              user: `${interaction.user} (${interaction.user.id})`,
-              channel: `${channel}`,
-              details: texts[lang].logs.withTranscript
+              user: `${interaction.user} (${interaction.user.id})`, channel: `${channel}`, details: texts[lang].logs.withTranscript
             }, attach);
-          } catch (e) {
-            console.warn('Transcrição falhou:', e.message);
+          } catch {
             await logEmbed(interaction.guild, lang, 'closed', {
-              user: `${interaction.user} (${interaction.user.id})`,
-              channel: `${channel}`,
-              details: texts[lang].logs.noTranscript
+              user: `${interaction.user} (${interaction.user.id})`, channel: `${channel}`, details: texts[lang].logs.noTranscript
             });
           }
         } else {
-          await channel.send({ embeds: [styledEmbed(interaction.guild, lang, '', texts[lang].closed, COLORS.ok)] });
+          await channel.send({ embeds: [styledEmbed(interaction.guild, lang, '', texts[lang].closed, COLORS.ok)] }).catch(()=>{});
           await logEmbed(interaction.guild, lang, 'closed', {
-            user: `${interaction.user} (${interaction.user.id})`,
-            channel: `${channel}`,
-            details: texts[lang].logs.noTranscript
+            user: `${interaction.user} (${interaction.user.id})`, channel: `${channel}`, details: texts[lang].logs.noTranscript
           });
         }
 
         clearInactivityTimer(channel.id);
-        setTimeout(async () => { await channel.delete().catch(() => {}); }, 5000);
+        setTimeout(async () => { await channel.delete().catch(()=>{}); }, 5000);
         return;
       }
 
       // Apagar ticket
       if (interaction.customId === 'delete_ticket') {
-        await interaction.reply({ embeds: [styledEmbed(interaction.guild, lang, '', texts[lang].deleted, COLORS.danger)], ephemeral: true });
-        await logEmbed(interaction.guild, lang, 'deleted', {
-          user: `${interaction.user} (${interaction.user.id})`,
-          channel: `${channel}`,
-        });
+        await interaction.reply({ embeds: [styledEmbed(interaction.guild, lang, '', texts[lang].deleted, COLORS.danger)], ephemeral: true }).catch(()=>{});
+        await logEmbed(interaction.guild, lang, 'deleted', { user: `${interaction.user} (${interaction.user.id})`, channel: `${channel}` });
         clearInactivityTimer(channel.id);
-        setTimeout(async () => { await channel.delete().catch(() => {}); }, 2000);
+        setTimeout(async () => { await channel.delete().catch(()=>{}); }, 2000);
         return;
       }
     }
   } catch (err) {
     console.error('❌ Erro na interação:', err);
     if (!interaction.replied) {
-      await interaction.reply({ content: '❌ Ocorreu um erro. Tente novamente mais tarde.', ephemeral: true }).catch(() => {});
+      // Mensagem de erro também no layout vermelho
+      const fallback = styledEmbed(interaction.guild || null, DEFAULT_LANG, 'Erro', '❌ Ocorreu um erro. Tente novamente mais tarde.', COLORS.danger);
+      try { await interaction.reply({ embeds: [fallback], ephemeral: true }); } catch {}
     }
   }
 });
