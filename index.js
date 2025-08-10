@@ -75,11 +75,11 @@ const texts = {
 `${':red_bar:'}
 
 **Suporte** • Abra um ticket para falar com a equipe`,
-    btnOpen: '🎟️ Abrir Ticket',
-    btnCloseWith: '✅ Fechar (com transcrição)',
-    btnCloseNo: '🛑 Fechar (sem transcrição)',
-    btnDelete: '🗑️ Apagar Ticket',
-    btnLang: '🌐 Switch to English',
+    btnOpen: '🎟️',
+    btnCloseWith: '✅',
+    btnCloseNo: '🛑',
+    btnDelete: '🗑️',
+    btnLang: '🌐 English',
 
     pinnedTitle: '— Atendimento',
     pinnedDesc:
