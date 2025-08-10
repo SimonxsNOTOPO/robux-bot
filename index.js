@@ -1,3 +1,32 @@
+// ----- Watchdog (reinício automático em caso de crash) -----
+const cluster = require('node:cluster');
+const os = require('node:os');
+
+if (cluster.isPrimary) {
+  let restarts = 0;
+
+  function forkWorker() {
+    const worker = cluster.fork();
+    worker.on('exit', (code, signal) => {
+      restarts++;
+      const backoff = Math.min(30000, 2000 * restarts); // até 30s
+      console.warn(`⚠️ Worker saiu (code=${code}, signal=${signal}). Reiniciando em ${backoff/1000}s…`);
+      setTimeout(forkWorker, backoff);
+    });
+  }
+
+  console.log(`👑 Master PID ${process.pid} iniciando worker…`);
+  forkWorker();
+
+  // Opcional: reiniciar manualmente pelo console do Railway (enviando SIGUSR2)
+  process.on('SIGUSR2', () => {
+    console.log('♻️ Reinício manual solicitado (SIGUSR2).');
+    for (const id in cluster.workers) cluster.workers[id].process.kill();
+  });
+  return; // não continua no master
+}
+
+// ========================= A PARTIR DAQUI: BOT =========================
 require('dotenv').config();
 
 const {
@@ -25,17 +54,23 @@ const COLORS = {
   warn:    0xf59e0b,
   danger:  0xb91c1c
 };
-/* ================================================================ */
 
 /* ======================== CONFIG GERAL ======================== */
 const TICKET_PREFIX = 'ticket-';
 const DEFAULT_LANG = 'pt';
 const INACTIVITY_HOURS = Number(process.env.INACTIVITY_HOURS || 12);
 const INACTIVITY_MS = Math.max(1, INACTIVITY_HOURS) * 60 * 60 * 1000;
-const BAR_IMAGE_URL = process.env.BAR_IMAGE_URL || ""; // URL pública da barra (imagem)
+const BAR_IMAGE_URL = process.env.BAR_IMAGE_URL || ""; // URL pública da imagem da barra
 
-process.on('unhandledRejection', (r) => console.error('⚠️ UnhandledRejection:', r));
-process.on('uncaughtException',  (e) => console.error('⚠️ UncaughtException:', e));
+process.on('unhandledRejection', (r) => {
+  console.error('⚠️ UnhandledRejection:', r);
+  // deixa o worker continuar; se for crítico, o processo cairá e o watchdog religa
+});
+process.on('uncaughtException',  (e) => {
+  console.error('⚠️ UncaughtException:', e);
+  // encerra para o watchdog religar
+  setTimeout(() => process.exit(1), 500);
+});
 
 ['DISCORD_TOKEN', 'GUILD_ID'].forEach(k => { if (!process.env[k]) console.warn(`⚠️ Variável ausente: ${k}`); });
 
@@ -188,7 +223,6 @@ const TERMS_PT = [
   { num: 10, title: 'Dúvidas e Contato', text:
 'Em caso de qualquer dúvida, entre em contato com nossa equipe através do sistema de tickets.' },
 ];
-/* ================================================================ */
 
 /* ======================== HELPERS ======================== */
 const wait = (ms) => new Promise(r => setTimeout(r, ms));
@@ -279,7 +313,6 @@ async function logEmbed(guild, lang, kind, data = {}, attachment) {
 async function collectTranscript(channel) {
   const lines = [];
   let lastId = null;
-  let fetchedTotal = 0;
 
   while (true) {
     const opts = { limit: 100 };
@@ -289,7 +322,6 @@ async function collectTranscript(channel) {
 
     const arr = [...batch.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
     for (const m of arr) {
-      fetchedTotal++;
       const time = new Date(m.createdTimestamp).toISOString();
       const author = `${m.author.tag} (${m.author.id})`;
       const content = m.content || '';
@@ -297,7 +329,7 @@ async function collectTranscript(channel) {
       lines.push(`[${time}] ${author}: ${content} ${attachments}`.trim());
     }
     lastId = arr[0].id;
-    if (fetchedTotal >= 2000) break;
+    if (lines.length > 10000) break; // limite segurança
   }
 
   const text = lines.join('\n') || 'Sem mensagens.';
@@ -350,13 +382,13 @@ const slashCommands = [
 
   new SlashCommandBuilder()
     .setName('termos')
-    .setDescription('Envia os Termos (1 a 10) no layout vermelho.')
+    .setDescription('Envia os Termos em 2 mensagens (1–5 e 6–10).')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
 ].map(c => c.toJSON());
 
 /* ============================ READY ============================ */
 client.once('ready', async () => {
-  console.log(`✅ Logado como ${client.user.tag}`);
+  console.log(`✅ Logado como ${client.user.tag} (PID ${process.pid})`);
   try {
     const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     await rest.put(
@@ -377,9 +409,7 @@ client.on('interactionCreate', async (interaction) => {
       const lang = DEFAULT_LANG;
       const g = interaction.guild;
 
-      const desc = texts[lang].painelDesc
-        .replaceAll(':red_bar:', ce(g, 'red_bar'));
-
+      const desc = texts[lang].painelDesc.replaceAll(':red_bar:', ce(g, 'red_bar'));
       const embed = styledEmbed(g, lang, texts[lang].painelTitle, desc, COLORS.primary);
 
       const abrirBtn = new ButtonBuilder()
@@ -413,7 +443,7 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
-    // /termos — envia 10 embeds (com checagem de permissões e fallback)
+    // /termos — agora 2 embeds (1–5) e (6–10)
     if (interaction.isChatInputCommand() && interaction.commandName === 'termos') {
       const g = interaction.guild;
       const channel = interaction.channel;
@@ -427,7 +457,7 @@ client.on('interactionCreate', async (interaction) => {
       const perms = channel.permissionsFor(me);
       if (!perms || !perms.has(needed)) {
         await interaction.reply({
-          content: '❌ Não consigo enviar termos aqui. Dê ao bot: **Ver canal**, **Enviar mensagens** e **Inserir links/embeds**.',
+          content: '❌ Sem permissão aqui. Dê ao bot: **Ver canal**, **Enviar mensagens** e **Inserir links/embeds**.',
           ephemeral: true
         });
         return;
@@ -435,29 +465,31 @@ client.on('interactionCreate', async (interaction) => {
 
       await interaction.reply({ content: '📄 Enviando termos…', ephemeral: true });
 
-      for (const t of TERMS_PT) {
-        const numEmoji = ce(g, `red_${t.num}`);
-        const embed = new EmbedBuilder()
+      const pack = (items) => {
+        const emb = new EmbedBuilder()
           .setColor(COLORS.primary)
-          .setTitle(`${numEmoji} — ${t.title}`)
-          .setDescription(t.text)
+          .setTitle('🟥 — Termos de Compra')
           .setFooter({ text: texts.pt.brand });
 
-        if (BAR_IMAGE_URL) embed.setImage(BAR_IMAGE_URL);
+        items.forEach(t => {
+          const emoji = ce(g, `red_${t.num}`);
+          emb.addFields({ name: `${emoji} — ${t.title}`, value: t.text.slice(0, 1024) || '—' });
+        });
 
-        try {
-          await channel.send({ embeds: [embed] });
-        } catch (err) {
-          console.warn('Falha ao enviar embed, enviando texto puro:', err?.message);
-          await channel.send({ content: `**${t.num} — ${t.title}**\n${t.text}` }).catch(()=>{});
-        }
+        if (BAR_IMAGE_URL) emb.setImage(BAR_IMAGE_URL);
+        return emb;
+      };
 
-        await wait(350); // pequeno intervalo anti rate‑limit
-      }
+      const first = pack(TERMS_PT.slice(0,5));
+      const second = pack(TERMS_PT.slice(5,10));
+
+      await channel.send({ embeds: [first] });
+      await wait(400);
+      await channel.send({ embeds: [second] });
       return;
     }
 
-    // Botão: abrir ticket (layout vermelho e sem fixar)
+    // Botão: abrir ticket
     if (interaction.isButton() && interaction.customId === 'abrir_ticket') {
       const guild = interaction.guild;
       const categoryId = process.env.TICKETS_CATEGORY_ID || null;
@@ -508,7 +540,6 @@ client.on('interactionCreate', async (interaction) => {
 
       await interaction.reply({ content: `✅ ${texts[lang].ticketCreated(`${channel}`)}`, ephemeral: true });
 
-      // Mensagem 1
       const m1 = styledEmbed(
         guild,
         lang,
@@ -518,7 +549,6 @@ client.on('interactionCreate', async (interaction) => {
       );
       await channel.send({ embeds: [m1] });
 
-      // Mensagem 2 + botões
       const m2 = styledEmbed(
         guild,
         lang,
