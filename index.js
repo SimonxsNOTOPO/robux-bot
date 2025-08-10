@@ -14,6 +14,7 @@ const {
   SlashCommandBuilder,
   AttachmentBuilder,
   EmbedBuilder,
+  PermissionsBitField
 } = require('discord.js');
 
 /* ===================== CORES (tema vermelho) ===================== */
@@ -32,8 +33,6 @@ const DEFAULT_LANG = 'pt';
 const INACTIVITY_HOURS = Number(process.env.INACTIVITY_HOURS || 12);
 const INACTIVITY_MS = Math.max(1, INACTIVITY_HOURS) * 60 * 60 * 1000;
 const BAR_IMAGE_URL = process.env.BAR_IMAGE_URL || ""; // URL pública da barra (imagem)
-// Vars: DISCORD_TOKEN, GUILD_ID
-// Opcionais: STAFF_ROLE_ID, TICKETS_CATEGORY_ID, LOG_CHANNEL_ID, BAR_IMAGE_URL, INACTIVITY_HOURS
 
 process.on('unhandledRejection', (r) => console.error('⚠️ UnhandledRejection:', r));
 process.on('uncaughtException',  (e) => console.error('⚠️ UncaughtException:', e));
@@ -55,7 +54,6 @@ const texts = {
   pt: {
     brand: 'Loja de Robux',
     painelTitle: '— Painel de Tickets',
-    // Painel clean e padronizado no layout vermelho
     painelDesc:
 `${':red_bar:'}
 
@@ -155,65 +153,45 @@ To speed up, send:
 
 /* ====================== TERMOS (transcritos) ====================== */
 const TERMS_PT = [
-  {
-    num: 1, title: 'Responsabilidade do Cliente',
-    text:
-'O cliente é responsável por fornecer as informações corretas e completas no momento da compra. Erros ou informações incompletas podem resultar em atrasos na entrega ou problemas de acesso ao produto.'
-  },
-  {
-    num: 2, title: 'Pagamento e Reembolso',
-    text:
+  { num: 1,  title: 'Responsabilidade do Cliente', text:
+'O cliente é responsável por fornecer as informações corretas e completas no momento da compra. Erros ou informações incompletas podem resultar em atrasos na entrega ou problemas de acesso ao produto.' },
+
+  { num: 2,  title: 'Pagamento e Reembolso', text:
 `A compra deve ser feita utilizando um dos métodos de pagamento disponíveis no ticket de cada loja.
 
 • Todos os pagamentos pelos nossos serviços são definitivos e não reembolsáveis após a entrega do produto, salvo em circunstâncias extremamente específicas.  
 • Tentativas de cancelamento ou contestação após a entrega serão consideradas fraude, sujeitando o autor às consequências legais.  
 • Para a compra de Robux, nossos serviços não cobrem questões relacionadas à dependência do Roblox. Portanto, banimentos e contestações realizados pela plataforma não são de responsabilidade da nossa loja.  
-• Em caso de reembolsos, o usuário concorda em aguardar um prazo de até 3 dias úteis para receber o valor.`
-  },
-  {
-    num: 3, title: 'Ativação após Confirmação',
-    text:
-'O acesso ao produto adquirido será concedido somente após a confirmação do pagamento. O cliente assume total responsabilidade caso acesse o jogo ou servidor antes da liberação oficial por um atendente, podendo comprometer a ativação do produto.'
-  },
-  {
-    num: 4, title: 'Prazo de Entrega',
-    text:
-'As entregas serão realizadas com um prazo de até 72 horas após a confirmação do pagamento. Caso ocorra algum atraso, entraremos em contato para informar sobre a situação.'
-  },
-  {
-    num: 5, title: 'Entregas Programadas',
-    text:
-'Ao efetuar o pagamento, você obtém o direito de posse do item adquirido. Algumas entregas podem ser agendadas para outro dia, desde que haja aviso prévio e acordo. Caso haja imprevistos e não seja possível realizar a entrega no dia combinado, o pedido será automaticamente reagendado para o próximo dia útil, respeitando nosso horário de atendimento.'
-  },
-  {
-    num: 6, title: 'Suporte Técnico',
-    text:
-'Oferecemos suporte técnico para questões relacionadas à entrega e acesso ao produto adquirido. Qualquer problema deve ser relatado imediatamente dentro do prazo de 72 horas para que possamos resolver de forma rápida e eficiente.'
-  },
-  {
-    num: 7, title: 'Política de Privacidade e Logs de Atividade',
-    text:
-'Garantimos total integridade e segurança dos dados compartilhados conosco pelo usuário, bem como de outras informações, ao longo de todo o processo. Todas as atividades realizadas pelo usuário dentro do servidor são registradas em logs. Portanto, qualquer violação dos termos, condições ou regras pode ser visualizada no banco de dados e usada como prova contra o autor.'
-  },
-  {
-    num: 8, title: 'Alterações nos Termos',
-    text:
-'Reservamo‑nos o direito de fazer alterações nestes termos a qualquer momento, mediante aviso prévio aos clientes. É responsabilidade do cliente revisar regularmente os termos de compra para estar ciente de quaisquer atualizações e alterações.'
-  },
-  {
-    num: 9, title: 'Aceitação dos Termos',
-    text:
-'Ao realizar uma compra em nosso servidor, o cliente concorda com todos os termos e condições estabelecidos acima.'
-  },
-  {
-    num: 10, title: 'Dúvidas e Contato',
-    text:
-'Em caso de qualquer dúvida, entre em contato com nossa equipe através do sistema de tickets.'
-  },
+• Em caso de reembolsos, o usuário concorda em aguardar um prazo de até 3 dias úteis para receber o valor.` },
+
+  { num: 3,  title: 'Ativação após Confirmação', text:
+'O acesso ao produto adquirido será concedido somente após a confirmação do pagamento. O cliente assume total responsabilidade caso acesse o jogo ou servidor antes da liberação oficial por um atendente, podendo comprometer a ativação do produto.' },
+
+  { num: 4,  title: 'Prazo de Entrega', text:
+'As entregas serão realizadas com um prazo de até 72 horas após a confirmação do pagamento. Caso ocorra algum atraso, entraremos em contato para informar sobre a situação.' },
+
+  { num: 5,  title: 'Entregas Programadas', text:
+'Ao efetuar o pagamento, você obtém o direito de posse do item adquirido. Algumas entregas podem ser agendadas para outro dia, desde que haja aviso prévio e acordo. Caso haja imprevistos e não seja possível realizar a entrega no dia combinado, o pedido será automaticamente reagendado para o próximo dia útil, respeitando nosso horário de atendimento.' },
+
+  { num: 6,  title: 'Suporte Técnico', text:
+'Oferecemos suporte técnico para questões relacionadas à entrega e acesso ao produto adquirido. Qualquer problema deve ser relatado imediatamente dentro do prazo de 72 horas para que possamos resolver de forma rápida e eficiente.' },
+
+  { num: 7,  title: 'Política de Privacidade e Logs de Atividade', text:
+'Garantimos total integridade e segurança dos dados compartilhados conosco pelo usuário, bem como de outras informações, ao longo de todo o processo. Todas as atividades realizadas pelo usuário dentro do servidor são registradas em logs. Portanto, qualquer violação dos termos, condições ou regras pode ser visualizada no banco de dados e usada como prova contra o autor.' },
+
+  { num: 8,  title: 'Alterações nos Termos', text:
+'Reservamo‑nos o direito de fazer alterações nestes termos a qualquer momento, mediante aviso prévio aos clientes. É responsabilidade do cliente revisar regularmente os termos de compra para estar ciente de quaisquer atualizações e alterações.' },
+
+  { num: 9,  title: 'Aceitação dos Termos', text:
+'Ao realizar uma compra em nosso servidor, o cliente concorda com todos os termos e condições estabelecidos acima.' },
+
+  { num: 10, title: 'Dúvidas e Contato', text:
+'Em caso de qualquer dúvida, entre em contato com nossa equipe através do sistema de tickets.' },
 ];
 /* ================================================================ */
 
 /* ======================== HELPERS ======================== */
+const wait = (ms) => new Promise(r => setTimeout(r, ms));
 const safe = (s) => s.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 90);
 
 const isStaff = (member) => {
@@ -394,7 +372,7 @@ client.once('ready', async () => {
 /* ========================= INTERAÇÕES ========================= */
 client.on('interactionCreate', async (interaction) => {
   try {
-    // /painelticket (layout padrão vermelho em tudo)
+    // /painelticket
     if (interaction.isChatInputCommand() && interaction.commandName === 'painelticket') {
       const lang = DEFAULT_LANG;
       const g = interaction.guild;
@@ -435,10 +413,27 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
-    // /termos — envia 10 embeds no layout vermelho
+    // /termos — envia 10 embeds (com checagem de permissões e fallback)
     if (interaction.isChatInputCommand() && interaction.commandName === 'termos') {
       const g = interaction.guild;
-      await interaction.reply({ content: '📄 Enviando termos...', ephemeral: true });
+      const channel = interaction.channel;
+
+      const me = g.members.me;
+      const needed = new PermissionsBitField([
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.EmbedLinks
+      ]);
+      const perms = channel.permissionsFor(me);
+      if (!perms || !perms.has(needed)) {
+        await interaction.reply({
+          content: '❌ Não consigo enviar termos aqui. Dê ao bot: **Ver canal**, **Enviar mensagens** e **Inserir links/embeds**.',
+          ephemeral: true
+        });
+        return;
+      }
+
+      await interaction.reply({ content: '📄 Enviando termos…', ephemeral: true });
 
       for (const t of TERMS_PT) {
         const numEmoji = ce(g, `red_${t.num}`);
@@ -450,18 +445,24 @@ client.on('interactionCreate', async (interaction) => {
 
         if (BAR_IMAGE_URL) embed.setImage(BAR_IMAGE_URL);
 
-        await interaction.channel.send({ embeds: [embed] });
+        try {
+          await channel.send({ embeds: [embed] });
+        } catch (err) {
+          console.warn('Falha ao enviar embed, enviando texto puro:', err?.message);
+          await channel.send({ content: `**${t.num} — ${t.title}**\n${t.text}` }).catch(()=>{});
+        }
+
+        await wait(350); // pequeno intervalo anti rate‑limit
       }
       return;
     }
 
-    // Botão: abrir ticket (tudo no layout vermelho e sem fixar)
+    // Botão: abrir ticket (layout vermelho e sem fixar)
     if (interaction.isButton() && interaction.customId === 'abrir_ticket') {
       const guild = interaction.guild;
       const categoryId = process.env.TICKETS_CATEGORY_ID || null;
       const staffRoleId = process.env.STAFF_ROLE_ID || null;
 
-      // 1 ticket por usuário (nome/topic)
       const existing = guild.channels.cache.find(c =>
         c.type === ChannelType.GuildText &&
         channelIsTicket(c) &&
@@ -475,7 +476,6 @@ client.on('interactionCreate', async (interaction) => {
       const lang = DEFAULT_LANG;
       const channelName = buildTicketName(interaction.user.username, lang);
 
-      // permissões com anexos
       const overwrites = [
         { id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] },
         { id: interaction.user.id, allow: [
@@ -508,27 +508,26 @@ client.on('interactionCreate', async (interaction) => {
 
       await interaction.reply({ content: `✅ ${texts[lang].ticketCreated(`${channel}`)}`, ephemeral: true });
 
-      // Mensagem 1 (não fixa)
+      // Mensagem 1
       const m1 = styledEmbed(
         guild,
         lang,
-        `:red_1: ${texts[lang].pinnedTitle}`,
+        `${ce(guild,'red_1')} ${texts[lang].pinnedTitle}`,
         texts[lang].pinnedDesc,
         COLORS.accent
       );
       await channel.send({ embeds: [m1] });
 
-      // Mensagem 2 (intro + botões)
+      // Mensagem 2 + botões
       const m2 = styledEmbed(
         guild,
         lang,
-        `:red_2: ${texts[lang].introTitle}`,
+        `${ce(guild,'red_2')} ${texts[lang].introTitle}`,
         texts[lang].introDesc,
         COLORS.primary
       );
       await channel.send({ embeds: [m2], components: [buildActionsRow(lang)] });
 
-      // Logs + timer
       await logEmbed(guild, lang, 'created', {
         user: `${interaction.user} (${interaction.user.id})`,
         channel: `${channel}`,
@@ -563,8 +562,8 @@ client.on('interactionCreate', async (interaction) => {
         await channel.setTopic(`TICKET_OWNER:${openerId || interaction.user.id} | LANG:${newLang}`).catch(()=>{});
         await interaction.deferUpdate();
 
-        const p = styledEmbed(channel.guild, newLang, `:red_1: ${texts[newLang].pinnedTitle}`, texts[newLang].pinnedDesc, COLORS.accent);
-        const i = styledEmbed(channel.guild, newLang, `:red_2: ${texts[newLang].introTitle}`, texts[newLang].introDesc, COLORS.primary);
+        const p = styledEmbed(channel.guild, newLang, `${ce(channel.guild,'red_1')} ${texts[newLang].pinnedTitle}`, texts[newLang].pinnedDesc, COLORS.accent);
+        const i = styledEmbed(channel.guild, newLang, `${ce(channel.guild,'red_2')} ${texts[newLang].introTitle}`, texts[newLang].introDesc, COLORS.primary);
 
         await channel.send({ embeds: [p] });
         await channel.send({ embeds: [i], components: [buildActionsRow(newLang)] });
