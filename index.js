@@ -1,4 +1,3 @@
-// Carrega variáveis (Railway lê automaticamente)
 require('dotenv').config();
 
 const {
@@ -17,35 +16,30 @@ const {
   EmbedBuilder,
 } = require('discord.js');
 
-/* ===================== CORES (somente roxos) ===================== */
+/* ===================== CORES (tema vermelho) ===================== */
 const COLORS = {
-  primary: 0x6d28d9,  // roxo escuro
-  accent:  0x7c3aed,  // roxo vivo
-  soft:    0x8b5cf6,  // roxo claro
-  ok:      0x22c55e,  // verde (status ok)
-  warn:    0xf59e0b,  // amarelo (aviso)
-  danger:  0xef4444   // vermelho (erro)
+  primary: 0xdc2626, // vermelho principal
+  accent:  0xef4444, // vermelho vivo
+  ok:      0x22c55e, // verde (status ok)
+  warn:    0xf59e0b, // amarelo (aviso)
+  danger:  0xb91c1c  // vermelho escuro (erro)
 };
 /* ================================================================ */
 
-// ====== CONFIG ======
+/* ======================== CONFIG GERAL ======================== */
 const TICKET_PREFIX = 'ticket-';
 const DEFAULT_LANG = 'pt'; // 'pt' | 'en'
 const INACTIVITY_HOURS = Number(process.env.INACTIVITY_HOURS || 12);
 const INACTIVITY_MS = Math.max(1, INACTIVITY_HOURS) * 60 * 60 * 1000;
-// Variáveis esperadas: DISCORD_TOKEN, GUILD_ID
-// Opcionais: STAFF_ROLE_ID, TICKETS_CATEGORY_ID, LOG_CHANNEL_ID
+const BAR_IMAGE_URL = process.env.BAR_IMAGE_URL || ""; // URL da imagem da barra
+// Vars esperadas: DISCORD_TOKEN, GUILD_ID
+// Opcionais: STAFF_ROLE_ID, TICKETS_CATEGORY_ID, LOG_CHANNEL_ID, BAR_IMAGE_URL, INACTIVITY_HOURS
 
-// Tratamento global de erros
-process.on('unhandledRejection', (reason) => console.error('⚠️ UnhandledRejection:', reason));
-process.on('uncaughtException',  (err)    => console.error('⚠️ UncaughtException:',  err));
+process.on('unhandledRejection', (r) => console.error('⚠️ UnhandledRejection:', r));
+process.on('uncaughtException',  (e) => console.error('⚠️ UncaughtException:', e));
 
-// Verificação de variáveis essenciais
-['DISCORD_TOKEN', 'GUILD_ID'].forEach((k) => {
-  if (!process.env[k]) console.warn(`⚠️ Variável ausente: ${k}`);
-});
+['DISCORD_TOKEN', 'GUILD_ID'].forEach(k => { if (!process.env[k]) console.warn(`⚠️ Variável ausente: ${k}`); });
 
-// Cliente Discord
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -56,42 +50,42 @@ const client = new Client({
   partials: [Partials.Channel],
 });
 
-/* ===================== TEXTOS (PT/EN) ===================== */
+/* ========================= TEXTOS ========================= */
 const texts = {
   pt: {
     brand: 'Loja de Robux',
-    painelTitle: 'Comprar Robux via Gamepass',
+    painelTitle: '— Painel de Tickets',
     painelDesc:
-`Use o botão abaixo para abrir um **ticket privado** com nossa equipe.
+`:red_warning: **As lojas estão fechadas no momento**  
 
-**O que faremos no atendimento**
-• Confirmar a quantidade de Robux  
-• Criar/validar o *gamepass*  
-• Explicar pagamento e prazos de entrega`,
+:red_bar:
+
+**Suporte** • Abra um ticket para falar com a equipe
+**Horários** • Consulte nosso horário de atendimento`,
+
     btnOpen: '🎟️ Abrir Ticket',
     btnCloseWith: '✅ Fechar (com transcrição)',
     btnCloseNo: '🛑 Fechar (sem transcrição)',
     btnDelete: '🗑️ Apagar Ticket',
     btnLang: '🌐 Switch to English',
 
-    pinnedTitle: 'Aguarde, estamos chegando!',
+    pinnedTitle: '— Atendimento',
     pinnedDesc:
-`Para adiantar, envie:
-1) Quantidade de Robux desejada  
-2) Link do seu **jogo** onde será criado o *gamepass*  
-3) Seu **@** do Roblox  
-4) Comprovante de pagamento quando solicitado
+`**Seja paciente**, nossa equipe vai te atender.  
+Para adiantar, envie:
+• Quantidade de Robux  
+• Link do seu **jogo** (onde será criado o *gamepass*)  
+• Seu **@** do Roblox  
+• Comprovante quando solicitado
 
-> **Atenção:** Nunca compartilhe sua senha. O atendimento acontece **apenas neste canal**.`,
+> **Atenção:** nunca compartilhe sua senha. O atendimento acontece **apenas neste canal**.`,
 
-    introTitle: 'Como funciona',
+    introTitle: '— Como funciona',
     introDesc:
 `• Informamos o valor e criamos/validamos o *gamepass*  
-• Você efetua a compra do *gamepass*  
-• Confirmado o pagamento, os Robux entram na sua conta (considerando as taxas da plataforma)`,
+• Você compra o *gamepass*  
+• Confirmado o pagamento, os Robux entram na sua conta (com as taxas da plataforma)`,
 
-    inactivityWarn: (h) => `⏳ Este ticket será fechado automaticamente após **${h}h** sem mensagens.`,
-    inactivityAutoClose: '🕒 Ticket fechado automaticamente por inatividade.',
     ticketExists: (ch) => `Você já tem um ticket aberto: ${ch}`,
     ticketCreated: (ch) => `Ticket criado: ${ch}`,
     closing: 'Fechando este ticket…',
@@ -101,50 +95,50 @@ const texts = {
     notTicket: 'Este canal não parece ser um ticket.',
 
     logs: {
-      header: 'Registro de Tickets',
+      header: 'Ticket Logs',
       created: 'Ticket Criado',
       closed: 'Ticket Fechado',
       deleted: 'Ticket Apagado',
-      auto:    'fechado automaticamente (inatividade)',
       withTranscript: 'com transcrição',
       noTranscript: 'sem transcrição',
+      auto: 'fechado automaticamente (inatividade)'
     }
   },
 
   en: {
     brand: 'Robux Store',
-    painelTitle: 'Buy Robux via Gamepass',
+    painelTitle: '— Ticket Panel',
     painelDesc:
-`Use the button below to open a **private ticket** with our team.
+`:red_warning: **Stores are closed at the moment**  
 
-**What we will do**
-• Confirm the amount of Robux  
-• Create/validate the *gamepass*  
-• Explain payment and delivery times`,
+:red_bar:
+
+**Support** • Open a ticket to talk to the team  
+**Hours** • Check our business hours`,
+
     btnOpen: '🎟️ Open Ticket',
     btnCloseWith: '✅ Close (with transcript)',
     btnCloseNo: '🛑 Close (no transcript)',
     btnDelete: '🗑️ Delete Ticket',
     btnLang: '🌐 Mudar para Português',
 
-    pinnedTitle: 'Please be patient!',
+    pinnedTitle: '— Support',
     pinnedDesc:
-`To speed things up, send:
-1) Desired amount of Robux  
-2) Link to your **game** where the *gamepass* will be created  
-3) Your Roblox **@**  
-4) Payment proof when requested
+`**Please be patient**, our team will assist you.  
+To speed up, send:
+• Desired amount of Robux  
+• Link to your **game** (where the *gamepass* will be created)  
+• Your Roblox **@**  
+• Payment proof when requested
 
-> **Note:** Never share your password. Support happens **only in this channel**.`,
+> **Note:** never share your password. Support happens **only in this channel**.`,
 
-    introTitle: 'How it works',
+    introTitle: '— How it works',
     introDesc:
 `• We inform the price and create/validate the *gamepass*  
 • You purchase the *gamepass*  
-• After confirmation, Robux are delivered to your account (considering platform fees)`,
+• After confirmation, Robux are delivered to your account (platform fees apply)`,
 
-    inactivityWarn: (h) => `⏳ This ticket will auto‑close after **${h}h** of inactivity.`,
-    inactivityAutoClose: '🕒 Ticket auto‑closed due to inactivity.',
     ticketExists: (ch) => `You already have an open ticket: ${ch}`,
     ticketCreated: (ch) => `Ticket created: ${ch}`,
     closing: 'Closing this ticket…',
@@ -158,15 +152,14 @@ const texts = {
       created: 'Ticket Created',
       closed: 'Ticket Closed',
       deleted: 'Ticket Deleted',
-      auto:    'auto‑closed (inactivity)',
       withTranscript: 'with transcript',
       noTranscript: 'no transcript',
+      auto: 'auto‑closed (inactivity)'
     }
   }
 };
-/* ============================================================ */
 
-/* ========================= HELPERS ========================== */
+/* ======================== HELPERS ======================== */
 const safe = (s) => s.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 90);
 
 const isStaff = (member) => {
@@ -192,6 +185,14 @@ function buildTicketName(username, lang = DEFAULT_LANG) {
   return `${base}-${lang}`;
 }
 
+// Resolve custom emoji por nome -> "<:name:id>"
+function ce(guild, name) {
+  try {
+    const em = guild.emojis.cache.find(e => e.name === name);
+    return em ? `<:${em.name}:${em.id}>` : `:${name}:`;
+  } catch { return `:${name}:`; }
+}
+
 function buildActionsRow(lang) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('close_with_transcript').setLabel(texts[lang].btnCloseWith).setStyle(ButtonStyle.Success),
@@ -201,20 +202,16 @@ function buildActionsRow(lang) {
   );
 }
 
-// “Barra transparente”: divisor visual discreto (simulado)
-function decorateEmbed(embed, lang) {
-  // Adiciona um campo espaçador com caracteres invisíveis + linha sutil
-  const divider = '‎\n▁▁▁▁▁▁▁▁▁▁▁'; // linha leve (simula barra)
-  return embed.addFields({ name: '\u200B', value: divider });
-}
-
-function brandEmbed(lang, title, description, color = COLORS.primary) {
+// Cria embed no estilo do print (vermelho) + imagem de barra
+function styledEmbed(guild, lang, title, description, color = COLORS.primary) {
   const emb = new EmbedBuilder()
     .setColor(color)
-    .setTitle(`🟣 ${title}`)
+    .setTitle(`🟥 ${title}`)
     .setDescription(description)
     .setFooter({ text: texts[lang].brand });
-  return decorateEmbed(emb, lang);
+
+  if (BAR_IMAGE_URL) emb.setImage(BAR_IMAGE_URL);
+  return emb;
 }
 
 async function logEmbed(guild, lang, kind, data = {}, attachment) {
@@ -230,20 +227,20 @@ async function logEmbed(guild, lang, kind, data = {}, attachment) {
 
   const emb = new EmbedBuilder()
     .setColor(color)
-    .setTitle(`🟣 ${texts[lang].logs.header}`)
+    .setTitle(`🟥 ${texts[lang].logs.header}`)
     .addFields(
-      { name: 'Evento', value: `**${title}**`, inline: true },
+      { name: 'Evento',  value: `**${title}**`, inline: true },
       { name: 'Usuário', value: `${data.user || '—'}`, inline: true },
-      { name: 'Canal',  value: `${data.channel || '—'}`, inline: true },
+      { name: 'Canal',   value: `${data.channel || '—'}`, inline: true },
       ...(data.details ? [{ name: 'Detalhes', value: data.details, inline: false }] : [])
     )
     .setTimestamp();
 
-  const final = decorateEmbed(emb, lang);
+  if (BAR_IMAGE_URL) emb.setImage(BAR_IMAGE_URL);
 
   try {
-    if (attachment) await ch.send({ embeds: [final], files: [attachment] });
-    else await ch.send({ embeds: [final] });
+    if (attachment) await ch.send({ embeds: [emb], files: [attachment] });
+    else await ch.send({ embeds: [emb] });
   } catch {}
 }
 
@@ -268,24 +265,22 @@ async function collectTranscript(channel) {
       lines.push(`[${time}] ${author}: ${content} ${attachments}`.trim());
     }
     lastId = arr[0].id;
-    if (fetchedTotal >= 2000) break; // segurança
+    if (fetchedTotal >= 2000) break;
   }
 
   const text = lines.join('\n') || 'Sem mensagens.';
   const buf = Buffer.from(text, 'utf8');
   return new AttachmentBuilder(buf, { name: `transcript-${channel.name}.txt` });
 }
-/* ============================================================ */
 
-/* =================== INATIVIDADE (AUTO-CLOSE) =============== */
+/* =================== INATIVIDADE (AUTO‑CLOSE) =================== */
 const inactivityTimers = new Map(); // channelId -> timeoutId
-
 function startInactivityTimer(channel, lang) {
   clearInactivityTimer(channel.id);
   const id = setTimeout(async () => {
     try {
       if (!channelIsTicket(channel)) return;
-      await channel.send({ embeds: [brandEmbed(lang, '', texts[lang].inactivityAutoClose, COLORS.warn)] });
+      await channel.send({ embeds: [styledEmbed(channel.guild, lang, '', texts[lang].logs.auto, COLORS.warn)] });
       await logEmbed(channel.guild, lang, 'closed', {
         user: 'Sistema',
         channel: `${channel}`,
@@ -300,19 +295,17 @@ function startInactivityTimer(channel, lang) {
   }, INACTIVITY_MS);
   inactivityTimers.set(channel.id, id);
 }
-
 function clearInactivityTimer(channelId) {
   const t = inactivityTimers.get(channelId);
   if (t) clearTimeout(t);
   inactivityTimers.delete(channelId);
 }
-/* ============================================================ */
 
-/* ======================= SLASH CMDS ======================== */
+/* ======================= SLASH COMMANDS ======================= */
 const slashCommands = [
   new SlashCommandBuilder()
-    .setName('painel')
-    .setDescription('Publica o painel de compra de Robux.')
+    .setName('painelticket')
+    .setDescription('Publica o painel de tickets.')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
 
   new SlashCommandBuilder()
@@ -323,9 +316,8 @@ const slashCommands = [
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
 ].map(c => c.toJSON());
-/* ============================================================ */
 
-/* ========================= READY =========================== */
+/* ============================ READY ============================ */
 client.once('ready', async () => {
   console.log(`✅ Logado como ${client.user.tag}`);
   try {
@@ -339,25 +331,33 @@ client.once('ready', async () => {
     console.error('❌ Erro ao registrar comandos:', err);
   }
 });
-/* ============================================================ */
 
-/* ====================== INTERAÇÕES ========================= */
+/* ========================= INTERAÇÕES ========================= */
 client.on('interactionCreate', async (interaction) => {
   try {
-    /* ---------- /painel ---------- */
-    if (interaction.isChatInputCommand() && interaction.commandName === 'painel') {
+    // /painelticket
+    if (interaction.isChatInputCommand() && interaction.commandName === 'painelticket') {
       const lang = DEFAULT_LANG;
-      const embed = brandEmbed(lang, texts[lang].painelTitle, `${texts[lang].painelDesc}\n\n${texts[lang].inactivityWarn(INACTIVITY_HOURS)}`, COLORS.accent);
+      const g = interaction.guild;
+
+      // Tenta substituir tags de emoji pelo custom emoji do servidor
+      const desc = texts[lang].painelDesc
+        .replaceAll(':red_bar:', ce(g, 'red_bar'))
+        .replaceAll(':red_warning:', ce(g, 'red_warning'));
+
+      const embed = styledEmbed(g, lang, texts[lang].painelTitle, desc, COLORS.primary);
+
       const abrirBtn = new ButtonBuilder()
         .setCustomId('abrir_ticket')
         .setLabel(texts[lang].btnOpen)
         .setStyle(ButtonStyle.Primary);
+
       const row = new ActionRowBuilder().addComponents(abrirBtn);
       await interaction.reply({ embeds: [embed], components: [row] });
       return;
     }
 
-    /* ---------- /apagar_ticket ---------- */
+    // /apagar_ticket
     if (interaction.isChatInputCommand() && interaction.commandName === 'apagar_ticket') {
       if (!isStaff(interaction.member)) {
         await interaction.reply({ content: texts[DEFAULT_LANG].notAllowed, ephemeral: true });
@@ -378,13 +378,13 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
-    /* ---------- Botão: abrir_ticket ---------- */
+    // Botão: abrir ticket
     if (interaction.isButton() && interaction.customId === 'abrir_ticket') {
       const guild = interaction.guild;
       const categoryId = process.env.TICKETS_CATEGORY_ID || null;
       const staffRoleId = process.env.STAFF_ROLE_ID || null;
 
-      // Anti‑duplicado
+      // 1 ticket por usuário (check por nome ou topic)
       const existing = guild.channels.cache.find(c =>
         c.type === ChannelType.GuildText &&
         channelIsTicket(c) &&
@@ -398,7 +398,7 @@ client.on('interactionCreate', async (interaction) => {
       const lang = DEFAULT_LANG;
       const channelName = buildTicketName(interaction.user.username, lang);
 
-      // Permissões (anexos liberados)
+      // permissões com anexos
       const overwrites = [
         { id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] },
         { id: interaction.user.id, allow: [
@@ -431,24 +431,32 @@ client.on('interactionCreate', async (interaction) => {
 
       await interaction.reply({ content: `✅ ${texts[lang].ticketCreated(`${channel}`)}`, ephemeral: true });
 
-      // Embed fixado
-      const pinnedEmbed = new EmbedBuilder()
-        .setColor(COLORS.accent)
-        .setTitle(`⏳ ${texts[lang].pinnedTitle}`)
-        .setDescription(`${texts[lang].pinnedDesc}\n\n${texts[lang].inactivityWarn(INACTIVITY_HOURS)}`)
-        .setFooter({ text: texts[lang].brand });
-      const pinned = await channel.send({ embeds: [decorateEmbed(pinnedEmbed, lang)] });
+      // Mensagem fixada (estilo vermelho)
+      const pinnedEmbed = styledEmbed(
+        guild,
+        lang,
+        `${ce(guild,'red_1')} ${texts[lang].pinnedTitle}`,
+        texts[lang].pinnedDesc,
+        COLORS.accent
+      );
+      const pinned = await channel.send({ embeds: [pinnedEmbed] });
 
-      // Tenta fixar
+      // Fixar se possível
       const me = guild.members.me;
       const canPin = me && channel.permissionsFor(me).has(PermissionFlagsBits.ManageMessages);
       if (canPin) await pinned.pin().catch(() => {});
 
-      // Intro + ações
-      const introEmbed = brandEmbed(lang, texts[lang].introTitle, texts[lang].introDesc, COLORS.primary);
+      // Intro + botões
+      const introEmbed = styledEmbed(
+        guild,
+        lang,
+        `${ce(guild,'red_2')} ${texts[lang].introTitle}`,
+        texts[lang].introDesc,
+        COLORS.primary
+      );
       await channel.send({ embeds: [introEmbed], components: [buildActionsRow(lang)] });
 
-      // Log + iniciar timer de inatividade
+      // Logs + timer
       await logEmbed(guild, lang, 'created', {
         user: `${interaction.user} (${interaction.user.id})`,
         channel: `${channel}`,
@@ -457,7 +465,7 @@ client.on('interactionCreate', async (interaction) => {
       return;
     }
 
-    /* ---------- Botões do ticket ---------- */
+    // Botões do ticket
     if (interaction.isButton() && ['close_with_transcript','close_no_transcript','delete_ticket','toggle_lang'].includes(interaction.customId)) {
       const channel = interaction.channel;
       if (!channelIsTicket(channel)) {
@@ -481,42 +489,46 @@ client.on('interactionCreate', async (interaction) => {
         const base = channel.name.replace(/-(pt|en)$/i, '');
         await channel.setName(`${base}-${newLang}`).catch(() => {});
         await channel.setTopic(`TICKET_OWNER:${openerId || interaction.user.id} | LANG:${newLang}`).catch(()=>{});
-
         await interaction.deferUpdate();
 
-        const pinnedEmbed = new EmbedBuilder()
-          .setColor(COLORS.accent)
-          .setTitle(`⏳ ${texts[newLang].pinnedTitle}`)
-          .setDescription(`${texts[newLang].pinnedDesc}\n\n${texts[newLang].inactivityWarn(INACTIVITY_HOURS)}`)
-          .setFooter({ text: texts[newLang].brand });
+        const pinnedEmbed = styledEmbed(
+          channel.guild,
+          newLang,
+          `${ce(channel.guild,'red_1')} ${texts[newLang].pinnedTitle}`,
+          texts[newLang].pinnedDesc,
+          COLORS.accent
+        );
+        const introEmbed  = styledEmbed(
+          channel.guild,
+          newLang,
+          `${ce(channel.guild,'red_2')} ${texts[newLang].introTitle}`,
+          texts[newLang].introDesc,
+          COLORS.primary
+        );
 
-        const introEmbed = brandEmbed(newLang, texts[newLang].introTitle, texts[newLang].introDesc, COLORS.primary);
-
-        await channel.send({ embeds: [decorateEmbed(pinnedEmbed, newLang)] });
+        await channel.send({ embeds: [pinnedEmbed] });
         await channel.send({ embeds: [introEmbed], components: [buildActionsRow(newLang)] });
-
-        // reinicia timer com novo idioma
         startInactivityTimer(channel, newLang);
         return;
       }
 
-      // Fechar com/sem transcrição
+      // Fechar (com/sem transcrição)
       if (interaction.customId === 'close_with_transcript' || interaction.customId === 'close_no_transcript') {
         const withTranscript = interaction.customId === 'close_with_transcript';
-        await interaction.reply({ embeds: [brandEmbed(lang, '', texts[lang].closing, COLORS.warn)], ephemeral: true });
+        await interaction.reply({ embeds: [styledEmbed(interaction.guild, lang, '', texts[lang].closing, COLORS.warn)], ephemeral: true });
 
         let attach = null;
         if (withTranscript) {
           try {
             attach = await collectTranscript(channel);
-            await channel.send({ embeds: [brandEmbed(lang, '', texts[lang].closed, COLORS.ok)], files: [attach] });
+            await channel.send({ embeds: [styledEmbed(interaction.guild, lang, '', texts[lang].closed, COLORS.ok)], files: [attach] });
             await logEmbed(interaction.guild, lang, 'closed', {
               user: `${interaction.user} (${interaction.user.id})`,
               channel: `${channel}`,
               details: texts[lang].logs.withTranscript
             }, attach);
           } catch (e) {
-            console.warn('Falha ao gerar transcrição:', e.message);
+            console.warn('Transcrição falhou:', e.message);
             await logEmbed(interaction.guild, lang, 'closed', {
               user: `${interaction.user} (${interaction.user.id})`,
               channel: `${channel}`,
@@ -524,7 +536,7 @@ client.on('interactionCreate', async (interaction) => {
             });
           }
         } else {
-          await channel.send({ embeds: [brandEmbed(lang, '', texts[lang].closed, COLORS.ok)] });
+          await channel.send({ embeds: [styledEmbed(interaction.guild, lang, '', texts[lang].closed, COLORS.ok)] });
           await logEmbed(interaction.guild, lang, 'closed', {
             user: `${interaction.user} (${interaction.user.id})`,
             channel: `${channel}`,
@@ -537,9 +549,9 @@ client.on('interactionCreate', async (interaction) => {
         return;
       }
 
-      // Apagar ticket (imediato)
+      // Apagar ticket
       if (interaction.customId === 'delete_ticket') {
-        await interaction.reply({ embeds: [brandEmbed(lang, '', texts[lang].deleted, COLORS.danger)], ephemeral: true });
+        await interaction.reply({ embeds: [styledEmbed(interaction.guild, lang, '', texts[lang].deleted, COLORS.danger)], ephemeral: true });
         await logEmbed(interaction.guild, lang, 'deleted', {
           user: `${interaction.user} (${interaction.user.id})`,
           channel: `${channel}`,
@@ -557,7 +569,7 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-/* ============== REINICIAR TIMER AO RECEBER MENSAGENS ============== */
+/* ============== RESETAR TIMER AO RECEBER MENSAGENS ============== */
 client.on('messageCreate', (message) => {
   try {
     if (message.author.bot) return;
@@ -568,5 +580,5 @@ client.on('messageCreate', (message) => {
   } catch {}
 });
 
-/* ========================= LOGIN ========================== */
+/* ============================ LOGIN ============================ */
 client.login(process.env.DISCORD_TOKEN);
